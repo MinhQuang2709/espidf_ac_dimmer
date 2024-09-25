@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "esp_timer.h"
 
 #define INPUT_PIN GPIO_NUM_22
 #define OUTPUT_PIN GPIO_NUM_18
@@ -12,7 +13,7 @@
 
 volatile bool zero_crossing_flag = false;
 volatile int cnt = 0;
-int dim = 0;
+uint32_t dim = 0;
 
 static void IRAM_ATTR zeroCrossing(void *arg)
 {
@@ -43,10 +44,21 @@ static void uart_event_task(void *parameters)
     while(1)
     {
         int len = uart_read_bytes(EX_UART_NUM, data, BUF_SIZE, 1000/portTICK_PERIOD_MS);
+        uart_write_bytes(EX_UART_NUM, (const char *) data, len);
         if (len > 0)
         {
             data[len] = '\0';
-            printf("fan power: %s\n", data);
+            dim = atoi((const char*) data);
+            if (dim < 0)
+            {
+                dim = 0;
+            }
+            else if (dim > 100)
+            {
+                dim = 100;
+            }
+            dim = 100 - dim;
+            printf("\n");
         }
     }
 }
@@ -73,7 +85,7 @@ void app_main(void)
     esp_timer_handle_t timer_handler;
     esp_timer_create(&my_timer_arg, &timer_handler);
     esp_timer_start_periodic(timer_handler, 100);
-    // config uart
+    // uart
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -83,12 +95,8 @@ void app_main(void)
         .source_clk = UART_SCLK_DEFAULT,
     };
     uart_driver_install(EX_UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0);
-    uart_param_config(EX_UART_NUM, &uart_congif);
+    uart_param_config(EX_UART_NUM, &uart_config);
 
     xTaskCreate(uart_event_task, "uart_event_task", 2024, NULL, 10, NULL);
 
-    while(1)
-    {
-        
-    }
 }
